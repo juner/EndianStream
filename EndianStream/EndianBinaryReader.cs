@@ -8,11 +8,16 @@ namespace EndianStream
     {
         const int MaxCharBytesSize = 128;
         bool IsLittleEndian { get; }
-        bool LeaveOpen;
         Decoder Decoder;
-        int MaxCharSize;
         Stream Input;
         byte[] Buffer;
+        byte[] CharBytes;
+        char[] SingleChar;
+        char[] CharBuffer;
+        int MaxCharSize;
+        bool Is2BytePerChar;
+        bool IsMemoryStream;
+        bool LeaveOpen;
         public EndianBinaryReader(Stream Input) : this(Input, new UTF8Encoding(), System.BitConverter.IsLittleEndian, false) { }
         public EndianBinaryReader(Stream Input, bool IsLittleEndian) : this(Input, new UTF8Encoding(), IsLittleEndian, false) { }
         public EndianBinaryReader(Stream Input, Encoding Encoding) : this(Input, Encoding, System.BitConverter.IsLittleEndian, false) { }
@@ -29,6 +34,13 @@ namespace EndianStream
             if (MinBufferSize < 16)
                 MinBufferSize = 16;
             Buffer = new byte[MinBufferSize];
+            // m_charBuffer and m_charBytes will be left null.
+
+            // For Encodings that always use 2 bytes per char (or more), 
+            // special case them here to make Read() & Peek() faster.
+            Is2BytePerChar = Encoding is UnicodeEncoding;
+            IsMemoryStream = Input.GetType() == typeof(MemoryStream);
+            this.LeaveOpen = LeaveOpen;
         }
         //
         // 概要:
@@ -508,12 +520,17 @@ namespace EndianStream
             {
                 if (disposing)
                 {
-                    if (!LeaveOpen)
-                    {
-                        Stream?.Dispose();
-                    }
-                    Stream = null;
+                    var CopyOfStream = Input;
+                    Input = null;
+                    if (CopyOfStream != null && !LeaveOpen)
+                        CopyOfStream.Close();
                 }
+                Input = null;
+                Buffer = null;
+                Decoder = null;
+                CharBytes = null;
+                SingleChar = null;
+                CharBuffer = null;
                 disposedValue = true;
             }
         }
